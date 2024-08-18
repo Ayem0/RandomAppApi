@@ -10,6 +10,9 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Numerics;
+using System.ComponentModel;
+using System.Net.WebSockets;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 
 namespace RandomAppApi.Authentication.Controllers
 {
@@ -45,16 +48,16 @@ namespace RandomAppApi.Authentication.Controllers
                 Elo = registerDto.Elo
             };
 
-            var result = await _userManager.CreateAsync(user, registerDto.Password!);
+            var res = await _userManager.CreateAsync(user, registerDto.Password!);
 
-            if (!result.Succeeded) 
+            if (res.Succeeded) 
             {
-                return BadRequest(result.Errors.Select(e => e.Description));
+                await SendConfirmationEmail(user);
+
+                return Ok(new { Message = "User registration succeded, a confirmation link has been send to your email." });
             }
 
-            await SendConfirmationEmail(user);
-
-            return Ok("User registration succeded, a confirmation email has been send to your email.");
+            return BadRequest(new ErrorResponseDto { Errors = res.Errors.Select(e => e.Description).ToList() });
         }
 
         [HttpGet("ConfirmEmail")]
@@ -69,18 +72,18 @@ namespace RandomAppApi.Authentication.Controllers
 
             if (user == null || user.EmailConfirmed)
             {
-                return BadRequest("Invalid request.");
+                return BadRequest(new ErrorResponseDto { Errors = ["Invalid request"] });
             }
 
             string token = confirmEmailDto.Token;
-            var result = await _userManager.ConfirmEmailAsync(user, token);
+            var res = await _userManager.ConfirmEmailAsync(user, token);
 
-            if (result.Succeeded)
+            if (res.Succeeded)
             {
                 return Ok("Email confirmation succeded.");
             }
 
-            return BadRequest(result.Errors.Select(e => e.Description));
+            return BadRequest(new ErrorResponseDto { Errors = res.Errors.Select(e => e.Description).ToList() });
         }
 
         [HttpPost("ResendConfirmEmail")]
@@ -118,17 +121,17 @@ namespace RandomAppApi.Authentication.Controllers
                 if (!await _userManager.CheckPasswordAsync(user, loginRequestDto.Password))
                 {
                     await _userManager.AccessFailedAsync(user);
-                    return BadRequest("Invalid credentials");
+                    return BadRequest(new ErrorResponseDto { Errors = ["Invalid credentials"] });
                 }
 
                 if (!user.EmailConfirmed)
                 {
-                    return BadRequest("Email is not confirmed.");
+                    return BadRequest(new ErrorResponseDto { Errors = ["Email is not confirmed."] });
                 }
 
                 if (await _userManager.IsLockedOutAsync(user) && user.LockoutEnd > DateTime.Now )
                 {
-                    return BadRequest("Account is locked out.");
+                    return BadRequest(new ErrorResponseDto { Errors = ["Account is locked out."] });
                 }
 
                 await _userManager.ResetAccessFailedCountAsync(user);
@@ -140,7 +143,7 @@ namespace RandomAppApi.Authentication.Controllers
                 return Ok(tokens);
             }
 
-            return BadRequest("Invalid credentials");
+            return BadRequest(new ErrorResponseDto { Errors = ["Invalid credentials"] });
         }
 
         [HttpPost("Refresh")]
@@ -151,42 +154,97 @@ namespace RandomAppApi.Authentication.Controllers
                 return BadRequest(ModelState);
             }
 
-            var tokenClaims = DecryptRefreshToken(refreshRequestDto.RefreshToken!);
-
-            if ( tokenClaims == null)
+            try
             {
-                return BadRequest("Invalid token claims.");
+                var tokenClaims = DecryptRefreshToken(refreshRequestDto.RefreshToken!);
+
+                if (tokenClaims == null)
+                {
+                    return BadRequest(new ErrorResponseDto { Errors = ["Invalid token."] });
+                }
+
+                var tokenEmail = tokenClaims.FindFirstValue(ClaimTypes.Email);
+
+                if (tokenEmail == null)
+                {
+                    return BadRequest(new ErrorResponseDto { Errors = ["Invalid token."] });
+                }
+
+                var user = await _userManager.FindByEmailAsync(tokenEmail);
+
+                if (user == null)
+                {
+                    return BadRequest(new ErrorResponseDto { Errors = ["Invalid token."] });
+                }
+
+                var storedRefreshToken = await _userManager.GetAuthenticationTokenAsync(user, "Default", "refreshToken");
+
+                if (storedRefreshToken == null || storedRefreshToken.ToString() != refreshRequestDto.RefreshToken)
+                {
+                    return BadRequest(new ErrorResponseDto { Errors = ["Invalid token."] });
+                }
+
+                await _userManager.RemoveAuthenticationTokenAsync(user, "Default", "refreshToken");
+
+                var tokens = GenerateJwtTokens(user);
+
+                await _userManager.SetAuthenticationTokenAsync(user, "Default", "refreshToken", tokens.RefreshToken);
+
+                return Ok(tokens);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex);
+            }
+        }
+
+        [HttpPost("ForgotPassword")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequestDto forgotPasswordRequest)
+        {
+            if ( !ModelState.IsValid )
+            { 
+                return BadRequest(ModelState);
+            }
+            
+            var user = await _userManager.FindByEmailAsync(forgotPasswordRequest.Email);
+
+            if (user == null || !user.EmailConfirmed) 
+            {
+                return BadRequest(new ErrorResponseDto { Errors = ["Invalid request"] });
             }
 
-            var tokenEmail = tokenClaims.FindFirstValue(ClaimTypes.Email);
+            await SendForgotPasswordEmail(user);
 
-            if (tokenEmail == null)
+            return Ok("Forgot password succeded, a reset password link has been sent to your email.");
+        }
+
+
+        [HttpPost("ResetPassword")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequestDto resetPasswordRequest)
+        {
+            if (!ModelState.IsValid)
             {
-                return BadRequest("Invalid token email.");
+                return BadRequest(ModelState);
             }
 
-            var user = await _userManager.FindByEmailAsync(tokenEmail);
+            var user = await _userManager.FindByEmailAsync(resetPasswordRequest.Email);
 
             if (user == null)
             {
-                return BadRequest("Invalid token.");
+                return BadRequest(new ErrorResponseDto { Errors = ["Invalid request"] });
             }
 
-            var storedRefreshToken = await _userManager.GetAuthenticationTokenAsync(user, "Default", "refreshToken");
+            var res = await _userManager.ResetPasswordAsync(user, resetPasswordRequest.Token, resetPasswordRequest.Password);
 
-            if (storedRefreshToken == null || storedRefreshToken.ToString() != refreshRequestDto.RefreshToken)
+            if (res.Succeeded)
             {
-                return BadRequest("Invalid token user");
+                return Ok("Rest password succeded.");
             }
 
-            await _userManager.RemoveAuthenticationTokenAsync(user, "Default", "refreshToken");
+            return BadRequest(new ErrorResponseDto { Errors = res.Errors.Select(e => e.Description).ToList() });
 
-            var tokens = GenerateJwtTokens(user);
-
-            await _userManager.SetAuthenticationTokenAsync(user, "Default", "refreshToken", tokens.RefreshToken);
-
-            return Ok(tokens);
         }
+
 
         private LoginResponseDto GenerateJwtTokens(User user)
         {
@@ -254,9 +312,20 @@ namespace RandomAppApi.Authentication.Controllers
             string token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
             string email = user.Email!;
             string link = $"https://localhost:7039/api/auth/confirmEmail?Email={ email }&Token={ token }";
-            string message = $"Please confirm your account by<a href = '{ link }'> clicking here </ a >.";
+            string message = $"Please confirm your account by <a href = '{ link }'> clicking here </a>.";
 
             await _emailSender.SendEmailAsync(email, "Email Confirmation", message);
+        }
+
+        private async Task SendForgotPasswordEmail(User user)
+        {
+
+            string token = await _userManager.GeneratePasswordResetTokenAsync(user);
+            string email = user.Email!;
+            string link = $"https://localhost:7039/api/auth/resetPassword?Email={email}&Token={token}";
+            string message = $"Reset your password by <a href = '{link}'> clicking here </a>.";
+
+            await _emailSender.SendEmailAsync(email, "Forgot Password", message);
         }
     }
 }

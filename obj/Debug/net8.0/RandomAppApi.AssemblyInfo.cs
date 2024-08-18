@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RandomAppApi")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7dea25a59bcae1fdf9bfd408d370a112b6c2ce37")]
 [assembly: System.Reflection.AssemblyProductAttribute("RandomAppApi")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RandomAppApi")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

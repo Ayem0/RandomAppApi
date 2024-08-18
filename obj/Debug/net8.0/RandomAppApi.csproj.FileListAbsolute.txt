@@ -144,3 +144,4 @@ C:\LIFE\PROJECTS\RANDOMAPP\RandomAppApi\obj\Debug\net8.0\refint\RandomAppApi.dll
 C:\LIFE\PROJECTS\RANDOMAPP\RandomAppApi\obj\Debug\net8.0\RandomAppApi.pdb
 C:\LIFE\PROJECTS\RANDOMAPP\RandomAppApi\obj\Debug\net8.0\RandomAppApi.genruntimeconfig.cache
 C:\LIFE\PROJECTS\RANDOMAPP\RandomAppApi\obj\Debug\net8.0\ref\RandomAppApi.dll
+C:\LIFE\PROJECTS\RANDOMAPP\RandomAppApi\obj\Debug\net8.0\RandomAppApi.sourcelink.json
