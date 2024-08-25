@@ -21,8 +21,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Messaging\Controllers\" />
+    <Folder Include="Authentication\Models\" />
     <Folder Include="Messaging\Dtos\" />
+    <Folder Include="Messaging\Models\" />
+    <Folder Include="Migrations\" />
   </ItemGroup>
 
 </Project>

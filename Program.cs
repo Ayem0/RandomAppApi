@@ -7,7 +7,7 @@ using System.Text;
 using RandomAppApi.Services.EmailSender;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using RandomAppApi.Database;
-using RandomAppApi.Authentication.Models;
+using RandomAppApi.Database.models;
 
 var builder = WebApplication.CreateBuilder(args);
 

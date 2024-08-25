@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 
-namespace RandomAppApi.Authentication.Models;
+namespace RandomAppApi.Database.models;
 
 public class Role : IdentityRole
 {
-    
+
 }

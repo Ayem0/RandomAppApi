@@ -1,18 +1,12 @@
 using RandomAppApi.Authentication.Dtos;
-using RandomAppApi.Authentication.Models;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using System.Numerics;
-using System.ComponentModel;
-using System.Net.WebSockets;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
+using RandomAppApi.Database.models;
 
 namespace RandomAppApi.Authentication.Controllers
 {
@@ -39,13 +33,12 @@ namespace RandomAppApi.Authentication.Controllers
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return BadRequest(new ErrorResponseDto { Errors = ModelState.Values.SelectMany(x => x.Errors).Select(y => y.ErrorMessage).ToList() });
             }
 
             var user = new User { 
                 UserName = registerDto.Username,
-                Email = registerDto.Email,
-                Elo = registerDto.Elo
+                Email = registerDto.Email
             };
 
             var res = await _userManager.CreateAsync(user, registerDto.Password!);
@@ -65,7 +58,8 @@ namespace RandomAppApi.Authentication.Controllers
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return BadRequest(new ErrorResponseDto { Errors = ModelState.Values.SelectMany(x => x.Errors).Select(y => y.ErrorMessage).ToList() });
+
             }
 
             var user = await _userManager.FindByEmailAsync(confirmEmailDto.Email);
@@ -80,7 +74,7 @@ namespace RandomAppApi.Authentication.Controllers
 
             if (res.Succeeded)
             {
-                return Ok("Email confirmation succeded.");
+                return Ok(new SuccessResponseDto { Message = "Email confirmation succeded." });
             }
 
             return BadRequest(new ErrorResponseDto { Errors = res.Errors.Select(e => e.Description).ToList() });
@@ -91,19 +85,20 @@ namespace RandomAppApi.Authentication.Controllers
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return BadRequest(new ErrorResponseDto { Errors = ModelState.Values.SelectMany(x => x.Errors).Select(y => y.ErrorMessage).ToList() });
+
             }
 
             var user = await _userManager.FindByEmailAsync(resendConfirmEmailDto.Email);
 
             if (user == null || user.EmailConfirmed)
             {
-                return BadRequest("Invalid request.");
+                return BadRequest(new ErrorResponseDto { Errors = ["Invalid request."] });
             }
 
             await SendConfirmationEmail(user);
 
-            return Ok("Resend confirmation email succeded, a confirmation email has been send to your email.");
+            return Ok(new SuccessResponseDto { Message = "Resend confirmation email succeded, a confirmation email has been send to your email." });
         }
 
         [HttpPost("Login")]
@@ -111,7 +106,8 @@ namespace RandomAppApi.Authentication.Controllers
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return BadRequest(new ErrorResponseDto { Errors = ModelState.Values.SelectMany(x => x.Errors).Select(y => y.ErrorMessage).ToList() });
+
             }
 
             var user = await _userManager.FindByEmailAsync(loginRequestDto.Email);
@@ -151,7 +147,8 @@ namespace RandomAppApi.Authentication.Controllers
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return BadRequest(new ErrorResponseDto { Errors = ModelState.Values.SelectMany(x => x.Errors).Select(y => y.ErrorMessage).ToList() });
+
             }
 
             try
@@ -202,10 +199,11 @@ namespace RandomAppApi.Authentication.Controllers
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequestDto forgotPasswordRequest)
         {
             if ( !ModelState.IsValid )
-            { 
-                return BadRequest(ModelState);
+            {
+                return BadRequest(new ErrorResponseDto { Errors = ModelState.Values.SelectMany(x => x.Errors).Select(y => y.ErrorMessage).ToList() });
+
             }
-            
+
             var user = await _userManager.FindByEmailAsync(forgotPasswordRequest.Email);
 
             if (user == null || !user.EmailConfirmed) 
@@ -215,16 +213,17 @@ namespace RandomAppApi.Authentication.Controllers
 
             await SendForgotPasswordEmail(user);
 
-            return Ok("Forgot password succeded, a reset password link has been sent to your email.");
+            return Ok(new SuccessResponseDto { Message = "Forgot password succeded, a reset password link has been sent to your email." });
         }
 
 
-        [HttpPost("ResetPassword")]
-        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequestDto resetPasswordRequest)
+        [HttpGet("ResetPassword")]
+        public async Task<IActionResult> ResetPassword([FromQuery] ResetPasswordRequestDto resetPasswordRequest)
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return BadRequest(new ErrorResponseDto { Errors = ModelState.Values.SelectMany(x => x.Errors).Select(y => y.ErrorMessage).ToList() });
+
             }
 
             var user = await _userManager.FindByEmailAsync(resetPasswordRequest.Email);
@@ -238,7 +237,7 @@ namespace RandomAppApi.Authentication.Controllers
 
             if (res.Succeeded)
             {
-                return Ok("Rest password succeded.");
+                return Ok(new SuccessResponseDto { Message = "Rest password succeded." });
             }
 
             return BadRequest(new ErrorResponseDto { Errors = res.Errors.Select(e => e.Description).ToList() });
@@ -309,9 +308,9 @@ namespace RandomAppApi.Authentication.Controllers
 
         private async Task SendConfirmationEmail(User user)
         {
-            string token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+            string token = Uri.EscapeDataString(await _userManager.GenerateEmailConfirmationTokenAsync(user));
             string email = user.Email!;
-            string link = $"https://localhost:7039/api/auth/confirmEmail?Email={ email }&Token={ token }";
+            string link = $"http://localhost:4200/confirm-email?Email={ email }&Token={ token }";
             string message = $"Please confirm your account by <a href = '{ link }'> clicking here </a>.";
 
             await _emailSender.SendEmailAsync(email, "Email Confirmation", message);
@@ -320,9 +319,9 @@ namespace RandomAppApi.Authentication.Controllers
         private async Task SendForgotPasswordEmail(User user)
         {
 
-            string token = await _userManager.GeneratePasswordResetTokenAsync(user);
+            string token = Uri.EscapeDataString(await _userManager.GeneratePasswordResetTokenAsync(user));
             string email = user.Email!;
-            string link = $"https://localhost:7039/api/auth/resetPassword?Email={email}&Token={token}";
+            string link = $"http://localhost:4200/reset-password?Email={email}&Token={token}";
             string message = $"Reset your password by <a href = '{link}'> clicking here </a>.";
 
             await _emailSender.SendEmailAsync(email, "Forgot Password", message);
